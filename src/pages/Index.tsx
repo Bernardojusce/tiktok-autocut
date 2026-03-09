@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AnimatePresence } from "framer-motion";
-import DropZone from "@/components/DropZone";
+import DropZone, { type InputSource } from "@/components/DropZone";
 import GuillotineCut from "@/components/GuillotineCut";
 import TerminalLog from "@/components/TerminalLog";
 
@@ -8,10 +8,12 @@ type AppState = "idle" | "cutting" | "processing";
 
 const Index = () => {
   const [state, setState] = useState<AppState>("idle");
-  const [fileName, setFileName] = useState("");
+  const [sourceLabel, setSourceLabel] = useState("");
+  const [inputSource, setInputSource] = useState<InputSource | null>(null);
 
-  const handleFileDrop = (file: File) => {
-    setFileName(file.name);
+  const handleSubmit = (source: InputSource) => {
+    setSourceLabel(source.label);
+    setInputSource(source);
     setState("cutting");
   };
 
@@ -22,16 +24,16 @@ const Index = () => {
   return (
     <div className="fixed inset-0 bg-background overflow-hidden">
       <AnimatePresence mode="wait">
-        {state === "idle" && <DropZone key="drop" onFileDrop={handleFileDrop} />}
+        {state === "idle" && <DropZone key="drop" onSubmit={handleSubmit} />}
       </AnimatePresence>
 
       {state === "cutting" && (
         <GuillotineCut onComplete={handleCutComplete} />
       )}
 
-      {state === "processing" && (
+      {state === "processing" && inputSource && (
         <div className="fixed inset-0 bg-background flex items-center justify-center">
-          <TerminalLog fileName={fileName} />
+          <TerminalLog source={inputSource} />
         </div>
       )}
     </div>
