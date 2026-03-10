@@ -3,12 +3,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { InputSource } from "@/components/DropZone";
+import type { GeneratedClip } from "@/components/ClipResults";
 
 interface TerminalLogProps {
   source: InputSource;
+  onComplete: (clips: GeneratedClip[]) => void;
 }
 
-const TerminalLog = ({ source }: TerminalLogProps) => {
+const TerminalLog = ({ source, onComplete }: TerminalLogProps) => {
   const { user } = useAuth();
   const [lines, setLines] = useState<string[]>([]);
   const [isComplete, setIsComplete] = useState(false);
@@ -27,7 +29,6 @@ const TerminalLog = ({ source }: TerminalLogProps) => {
 
   useEffect(() => {
     const process = async () => {
-      // Create job record
       if (user) {
         const { data: job } = await supabase
           .from("video_jobs")
@@ -52,7 +53,7 @@ const TerminalLog = ({ source }: TerminalLogProps) => {
           addLine(`> Buscando vídeo: "${source.label}"...`);
         }
 
-        addLine("> Iniciando trituração...");
+        addLine("> Iniciando processamento de cortes...");
 
         const body: Record<string, string> = {};
         if (source.type === "youtube") body.youtube_url = source.url;
@@ -70,7 +71,6 @@ const TerminalLog = ({ source }: TerminalLogProps) => {
 
         if (data?.steps) {
           let clipsCount = 0;
-          let publishedCount = 0;
           for (const step of data.steps) {
             await delay(400);
             addLine(`> ${step}`);
@@ -78,12 +78,17 @@ const TerminalLog = ({ source }: TerminalLogProps) => {
               const match = step.match(/(\d+)/);
               if (match) clipsCount = parseInt(match[1]);
             }
-            if (step.includes("✓")) publishedCount++;
           }
-          await updateJob("completed", clipsCount, publishedCount);
+
+          const generatedClips = buildClips(source.label, clipsCount);
+          await updateJob("completed", clipsCount);
+          setIsComplete(true);
+          await delay(500);
+          onComplete(generatedClips);
+          return;
         }
 
-        setIsComplete(true);
+        await simulateProcessing();
       } catch {
         addLine("> Conexão com servidor indisponível.");
         addLine("> Executando processamento local...");
@@ -106,31 +111,30 @@ const TerminalLog = ({ source }: TerminalLogProps) => {
 
       steps.push("Aplicando formato vertical 9:16...");
       steps.push("Gerando legendas automáticas...");
-      steps.push("Conectando ao TikTok...");
-
-      for (let i = 1; i <= clipCount; i++) {
-        steps.push(`Publicando clipe ${String(i).padStart(2, "0")}... ✓`);
-      }
-
-      steps.push("", `COMPLETO. ${clipCount} clipes publicados no TikTok.`, "Pode fechar esta aba.");
+      steps.push("Finalizando cortes para revisão...");
+      steps.push("");
+      steps.push(`COMPLETO. ${clipCount} cortes prontos para visualizar.`);
 
       for (const step of steps) {
         await delay(step === "" ? 300 : step.includes("Extraindo") ? 400 : 800);
         addLine(step ? `> ${step}` : "");
       }
 
-      await updateJob("completed", clipCount, clipCount);
+      const generatedClips = buildClips(source.label, clipCount);
+      await updateJob("completed", clipCount);
       setIsComplete(true);
+      await delay(500);
+      onComplete(generatedClips);
     };
 
-    const updateJob = async (status: string, clips: number, published: number) => {
+    const updateJob = async (status: string, clips: number) => {
       if (jobIdRef.current && user) {
         await supabase
           .from("video_jobs")
           .update({
             status,
             clips_count: clips,
-            published_count: published,
+            published_count: 0,
             completed_at: new Date().toISOString(),
           })
           .eq("id", jobIdRef.current);
@@ -138,7 +142,7 @@ const TerminalLog = ({ source }: TerminalLogProps) => {
     };
 
     process();
-  }, [source, user]);
+  }, [onComplete, source, user]);
 
   return (
     <div className="w-full max-w-2xl mx-auto px-6 h-full flex flex-col justify-center">
@@ -156,8 +160,6 @@ const TerminalLog = ({ source }: TerminalLogProps) => {
               className={`terminal-text text-sm ${
                 line.includes("COMPLETO")
                   ? "text-primary neon-text font-semibold mt-4"
-                  : line.includes("✓")
-                  ? "text-primary"
                   : line.includes("ERRO")
                   ? "text-destructive"
                   : line === ""
@@ -179,6 +181,22 @@ const TerminalLog = ({ source }: TerminalLogProps) => {
       </div>
     </div>
   );
+};
+
+const buildClips = (sourceLabel: string, count: number): GeneratedClip[] => {
+  const safeCount = Math.max(1, count || 0);
+
+  return Array.from({ length: safeCount }, (_, index) => {
+    const clipNumber = index + 1;
+    const seconds = 18 + ((index * 7) % 40);
+
+    return {
+      id: `clip-${clipNumber}`,
+      title: `${sourceLabel} · Corte ${String(clipNumber).padStart(2, "0")}`,
+      duration: `00:${String(seconds).padStart(2, "0")}`,
+      hook: "Abertura com gancho forte, cortes rápidos e foco no momento de maior retenção.",
+    };
+  });
 };
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));

@@ -38,15 +38,11 @@ serve(async (req) => {
 
     steps.push("Aplicando formato vertical 9:16...");
     steps.push("Gerando legendas automáticas...");
-    steps.push("Conectando ao TikTok...");
-
-    for (let i = 1; i <= clipCount; i++) {
-      steps.push(`Publicando clipe ${String(i).padStart(2, "0")}... ✓`);
-    }
+    steps.push("Finalizando cortes para revisão...");
 
     steps.push("");
-    steps.push(`COMPLETO. ${clipCount} clipes publicados no TikTok.`);
-    steps.push("Pode fechar esta aba.");
+    steps.push(`COMPLETO. ${clipCount} cortes prontos para visualizar.`);
+    steps.push("Abra a tela de resultados para revisar os cortes.");
 
     return new Response(JSON.stringify({ steps }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
