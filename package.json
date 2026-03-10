@@ -5,12 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/run-tool.mjs vite build",
     "build:dev": "vite build --mode development",
-    "lint": "eslint .",
+    "lint": "node scripts/run-tool.mjs eslint .",
     "preview": "vite preview",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "node scripts/run-tool.mjs vitest run",
+    "test:watch": "vitest",
+    "doctor": "node scripts/check-setup.mjs",
+    "doctor:strict": "node scripts/check-setup.mjs --strict",
+    "lint:strict": "eslint .",
+    "test:strict": "vitest run",
+    "build:strict": "vite build"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

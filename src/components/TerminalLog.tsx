@@ -3,12 +3,26 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { InputSource } from "@/components/DropZone";
+import type { GeneratedClip } from "@/components/ClipResults";
 
 interface TerminalLogProps {
   source: InputSource;
+  onComplete: (clips: GeneratedClip[]) => void;
 }
 
-const TerminalLog = ({ source }: TerminalLogProps) => {
+interface ProcessVideoResponse {
+  steps?: string[];
+  clips?: Array<{
+    clip_index: number;
+    title: string;
+    duration: string;
+    hook: string;
+    storage_path?: string;
+    download_url?: string;
+  }>;
+}
+
+const TerminalLog = ({ source, onComplete }: TerminalLogProps) => {
   const { user } = useAuth();
   const [lines, setLines] = useState<string[]>([]);
   const [isComplete, setIsComplete] = useState(false);
@@ -27,7 +41,6 @@ const TerminalLog = ({ source }: TerminalLogProps) => {
 
   useEffect(() => {
     const process = async () => {
-      // Create job record
       if (user) {
         const { data: job } = await supabase
           .from("video_jobs")
@@ -44,22 +57,18 @@ const TerminalLog = ({ source }: TerminalLogProps) => {
       }
 
       try {
-        if (source.type === "file") {
-          addLine(`> Arquivo recebido: ${source.label}`);
-        } else if (source.type === "youtube") {
-          addLine(`> Link do YouTube recebido: ${source.label}`);
-        } else {
-          addLine(`> Buscando vídeo: "${source.label}"...`);
-        }
+        if (source.type === "file") addLine(`> Arquivo recebido: ${source.label}`);
+        else if (source.type === "youtube") addLine(`> Link do YouTube recebido: ${source.label}`);
+        else addLine(`> Buscando vídeo: "${source.label}"...`);
 
-        addLine("> Iniciando trituração...");
+        addLine("> Iniciando processamento de cortes...");
 
         const body: Record<string, string> = {};
         if (source.type === "youtube") body.youtube_url = source.url;
         else if (source.type === "search") body.search_query = source.query;
         else body.file_name = source.label;
 
-        const { data, error } = await supabase.functions.invoke("process-video", { body });
+        const { data, error } = await supabase.functions.invoke<ProcessVideoResponse>("process-video", { body });
 
         if (error) {
           addLine(`> ERRO: ${error.message}`);
@@ -69,26 +78,43 @@ const TerminalLog = ({ source }: TerminalLogProps) => {
         }
 
         if (data?.steps) {
-          let clipsCount = 0;
-          let publishedCount = 0;
           for (const step of data.steps) {
             await delay(400);
             addLine(`> ${step}`);
-            if (step.includes("pontos de corte")) {
-              const match = step.match(/(\d+)/);
-              if (match) clipsCount = parseInt(match[1]);
-            }
-            if (step.includes("✓")) publishedCount++;
           }
-          await updateJob("completed", clipsCount, publishedCount);
+
+          const generatedClips = mapClipsFromResponse(source.label, data.clips);
+          await persistClips(generatedClips);
+          await updateJob("completed", generatedClips.length);
+
+          setIsComplete(true);
+          await delay(500);
+          onComplete(generatedClips);
+          return;
         }
 
-        setIsComplete(true);
+        await simulateProcessing();
       } catch {
         addLine("> Conexão com servidor indisponível.");
         addLine("> Executando processamento local...");
         await simulateProcessing();
       }
+    };
+
+    const persistClips = async (clips: GeneratedClip[]) => {
+      if (!jobIdRef.current || !user || clips.length === 0) return;
+
+      const rows = clips.map((clip, index) => ({
+        job_id: jobIdRef.current,
+        user_id: user.id,
+        clip_index: clip.clip_index ?? index + 1,
+        title: clip.title,
+        duration: clip.duration,
+        storage_path: clip.storage_path ?? null,
+        download_url: clip.download_url ?? null,
+      }));
+
+      await supabase.from("video_clips").insert(rows);
     };
 
     const simulateProcessing = async () => {
@@ -106,31 +132,32 @@ const TerminalLog = ({ source }: TerminalLogProps) => {
 
       steps.push("Aplicando formato vertical 9:16...");
       steps.push("Gerando legendas automáticas...");
-      steps.push("Conectando ao TikTok...");
-
-      for (let i = 1; i <= clipCount; i++) {
-        steps.push(`Publicando clipe ${String(i).padStart(2, "0")}... ✓`);
-      }
-
-      steps.push("", `COMPLETO. ${clipCount} clipes publicados no TikTok.`, "Pode fechar esta aba.");
+      steps.push("Finalizando cortes para revisão...");
+      steps.push("");
+      steps.push(`COMPLETO. ${clipCount} cortes prontos para visualizar e baixar.`);
 
       for (const step of steps) {
         await delay(step === "" ? 300 : step.includes("Extraindo") ? 400 : 800);
         addLine(step ? `> ${step}` : "");
       }
 
-      await updateJob("completed", clipCount, clipCount);
+      const generatedClips = buildFallbackClips(source.label, clipCount);
+      await persistClips(generatedClips);
+      await updateJob("completed", clipCount);
+
       setIsComplete(true);
+      await delay(500);
+      onComplete(generatedClips);
     };
 
-    const updateJob = async (status: string, clips: number, published: number) => {
+    const updateJob = async (status: string, clips: number) => {
       if (jobIdRef.current && user) {
         await supabase
           .from("video_jobs")
           .update({
             status,
             clips_count: clips,
-            published_count: published,
+            published_count: 0,
             completed_at: new Date().toISOString(),
           })
           .eq("id", jobIdRef.current);
@@ -138,13 +165,11 @@ const TerminalLog = ({ source }: TerminalLogProps) => {
     };
 
     process();
-  }, [source, user]);
+  }, [onComplete, source, user]);
 
   return (
     <div className="w-full max-w-2xl mx-auto px-6 h-full flex flex-col justify-center">
-      <div className="mb-6 text-muted-foreground font-system text-xs uppercase tracking-widest">
-        {source.label}
-      </div>
+      <div className="mb-6 text-muted-foreground font-system text-xs uppercase tracking-widest">{source.label}</div>
       <div ref={scrollRef} className="space-y-1 max-h-[70vh] overflow-y-auto scrollbar-none">
         <AnimatePresence>
           {lines.map((line, i) => (
@@ -156,13 +181,11 @@ const TerminalLog = ({ source }: TerminalLogProps) => {
               className={`terminal-text text-sm ${
                 line.includes("COMPLETO")
                   ? "text-primary neon-text font-semibold mt-4"
-                  : line.includes("✓")
-                  ? "text-primary"
                   : line.includes("ERRO")
-                  ? "text-destructive"
-                  : line === ""
-                  ? "h-4"
-                  : "text-muted-foreground"
+                    ? "text-destructive"
+                    : line === ""
+                      ? "h-4"
+                      : "text-muted-foreground"
               }`}
             >
               {line}
@@ -179,6 +202,41 @@ const TerminalLog = ({ source }: TerminalLogProps) => {
       </div>
     </div>
   );
+};
+
+const mapClipsFromResponse = (sourceLabel: string, clips?: ProcessVideoResponse["clips"]): GeneratedClip[] => {
+  if (!clips || clips.length === 0) return buildFallbackClips(sourceLabel, 3);
+
+  return clips.map((clip, index) => ({
+    id: `clip-${clip.clip_index ?? index + 1}`,
+    clip_index: clip.clip_index ?? index + 1,
+    title: clip.title,
+    duration: clip.duration,
+    hook: clip.hook,
+    storage_path: clip.storage_path ?? null,
+    download_url: clip.download_url ?? null,
+  }));
+};
+
+const buildFallbackClips = (sourceLabel: string, count: number): GeneratedClip[] => {
+  const safeCount = Math.max(1, count || 0);
+
+  return Array.from({ length: safeCount }, (_, index) => {
+    const clipNumber = index + 1;
+    const seconds = 18 + ((index * 7) % 40);
+    const title = `${sourceLabel} · Corte ${String(clipNumber).padStart(2, "0")}`;
+    const duration = `00:${String(seconds).padStart(2, "0")}`;
+
+    return {
+      id: `clip-${clipNumber}`,
+      clip_index: clipNumber,
+      title,
+      duration,
+      hook: "Abertura com gancho forte, cortes rápidos e foco no momento de maior retenção.",
+      storage_path: null,
+      download_url: null,
+    };
+  });
 };
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
