@@ -1,73 +1,97 @@
-# Welcome to your Lovable project
+# TikTok AutoCut
 
-## Project info
+Aplicação web em React + TypeScript para automatizar fluxos de corte/edição de vídeos curtos.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Stack
 
-## How can I edit this code?
+- Vite
+- React 18
+- TypeScript
+- Tailwind CSS + shadcn/ui
+- Supabase
+- Framer Motion
+- Vitest + Testing Library
 
-There are several ways of editing your application.
+## Requisitos
 
-**Use Lovable**
+- Node.js 18+
+- npm 9+
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+## Setup rápido
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+A aplicação sobe em `http://localhost:5173`.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Scripts
 
-**Use GitHub Codespaces**
+```sh
+npm run dev         # desenvolvimento
+npm run build       # build de produção
+npm run build:dev   # build em modo development
+npm run preview     # preview local do build
+npm run lint        # análise estática (ESLint)
+npm run test        # testes (Vitest)
+npm run test:watch  # testes em watch mode
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Troubleshooting
 
-## What technologies are used for this project?
+### Lockfile fora de sincronia (`npm ci`)
 
-This project is built with:
+Se `npm ci` acusar divergência entre `package.json` e `package-lock.json`, atualize o lockfile e versione a mudança:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+```sh
+rm -rf node_modules
+npm install
+npm ci
+```
 
-## How can I deploy this project?
+### `403 Forbidden` ao baixar dependências
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+Esse erro normalmente indica bloqueio de rede, proxy ou registry corporativo.
 
-## Can I connect a custom domain to my Lovable project?
+1. Verifique o registry atual:
 
-Yes, you can!
+```sh
+npm config get registry
+```
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+2. Configure o registry permitido no seu ambiente:
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+```sh
+npm config set registry <REGISTRY_PERMITIDO>
+```
+
+3. Se necessário, configure proxy/certificados (exemplo):
+
+```sh
+npm config set proxy http://proxy:8080
+npm config set https-proxy http://proxy:8080
+```
+
+> Dica: em ambiente corporativo, prefira registrar essa configuração em um `.npmrc` local do projeto ou no `~/.npmrc` do desenvolvedor.
+
+## Build para deploy
+
+```sh
+npm run build
+```
+
+Publice a pasta `dist/` no seu provedor de hospedagem estática.
+
+## Validação local
+
+Para confirmar se o projeto está funcionando no seu ambiente, execute:
+
+```sh
+npm install
+npm run lint
+npm run test
+npm run build
+```
+
+Se `npm install` falhar com `403 Forbidden`, ajuste primeiro o registry/proxy na seção de troubleshooting e rode os comandos novamente.
