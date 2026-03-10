@@ -47,6 +47,53 @@ export type Database = {
         }
         Relationships: []
       }
+      video_clips: {
+        Row: {
+          clip_index: number
+          created_at: string
+          download_url: string | null
+          duration: string | null
+          hook: string | null
+          id: string
+          job_id: string
+          storage_path: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          clip_index?: number
+          created_at?: string
+          download_url?: string | null
+          duration?: string | null
+          hook?: string | null
+          id?: string
+          job_id: string
+          storage_path?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          clip_index?: number
+          created_at?: string
+          download_url?: string | null
+          duration?: string | null
+          hook?: string | null
+          id?: string
+          job_id?: string
+          storage_path?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_clips_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "video_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       video_jobs: {
         Row: {
           clips_count: number | null
