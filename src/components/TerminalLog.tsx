@@ -204,12 +204,6 @@ const TerminalLog = ({ source, onComplete }: TerminalLogProps) => {
   );
 };
 
-const buildLocalPreviewUrl = (title: string, duration: string) => {
-  const content = `Prévia de corte\n\nTítulo: ${title}\nDuração: ${duration}\n`;
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-  return URL.createObjectURL(blob);
-};
-
 const mapClipsFromResponse = (sourceLabel: string, clips?: ProcessVideoResponse["clips"]): GeneratedClip[] => {
   if (!clips || clips.length === 0) return buildFallbackClips(sourceLabel, 3);
 
@@ -220,7 +214,7 @@ const mapClipsFromResponse = (sourceLabel: string, clips?: ProcessVideoResponse[
     duration: clip.duration,
     hook: clip.hook,
     storage_path: clip.storage_path ?? null,
-    download_url: clip.download_url || buildLocalPreviewUrl(clip.title, clip.duration),
+    download_url: clip.download_url ?? null,
   }));
 };
 
@@ -240,7 +234,7 @@ const buildFallbackClips = (sourceLabel: string, count: number): GeneratedClip[]
       duration,
       hook: "Abertura com gancho forte, cortes rápidos e foco no momento de maior retenção.",
       storage_path: null,
-      download_url: buildLocalPreviewUrl(title, duration),
+      download_url: null,
     };
   });
 };

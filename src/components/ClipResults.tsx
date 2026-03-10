@@ -1,4 +1,7 @@
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 export interface GeneratedClip {
   id: string;
@@ -16,42 +19,87 @@ interface ClipResultsProps {
   onReset: () => void;
 }
 
-const downloadBlob = (content: string, fileName: string) => {
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-};
-
-const downloadClip = (clip: GeneratedClip) => {
-  if (clip.download_url) {
-    const link = document.createElement("a");
-    link.href = clip.download_url;
-    link.download = `${clip.title.replace(/\s+/g, "-").toLowerCase()}.mp4`;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    return;
-  }
-
-  downloadBlob(
-    `Prévia de corte\n\nTítulo: ${clip.title}\nDuração: ${clip.duration}\nGancho: ${clip.hook}\n`,
-    `${clip.title.replace(/\s+/g, "-").toLowerCase()}.txt`
-  );
-};
+const toSafeFilename = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9\-\s]/g, "")
+    .trim()
+    .replace(/\s+/g, "-");
 
 const ClipResults = ({ sourceLabel, clips, onReset }: ClipResultsProps) => {
-  const downloadAll = () => {
-    clips.forEach((clip, index) => {
-      setTimeout(() => downloadClip(clip), index * 200);
-    });
+  const [previewClip, setPreviewClip] = useState<GeneratedClip | null>(null);
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+  const [loadingClipId, setLoadingClipId] = useState<string | null>(null);
+
+  const hasAnyPreview = useMemo(
+    () => clips.some((clip) => Boolean(clip.download_url || clip.storage_path)),
+    [clips]
+  );
+
+  const resolveClipUrl = async (clip: GeneratedClip) => {
+    if (clip.download_url) return clip.download_url;
+    if (signedUrls[clip.id]) return signedUrls[clip.id];
+    if (!clip.storage_path) return null;
+
+    const { data, error } = await supabase.storage
+      .from("clips")
+      .createSignedUrl(clip.storage_path, 60 * 5);
+
+    if (error || !data?.signedUrl) return null;
+
+    setSignedUrls((prev) => ({ ...prev, [clip.id]: data.signedUrl }));
+    return data.signedUrl;
+  };
+
+  const openPreview = async (clip: GeneratedClip) => {
+    setLoadingClipId(clip.id);
+    const url = await resolveClipUrl(clip);
+    setLoadingClipId(null);
+
+    if (!url) {
+      toast.error("Preview indisponível para este corte no momento.");
+      return;
+    }
+
+    setPreviewClip({ ...clip, download_url: url });
+  };
+
+  const downloadClip = async (clip: GeneratedClip) => {
+    setLoadingClipId(clip.id);
+    const url = await resolveClipUrl(clip);
+
+    if (!url) {
+      setLoadingClipId(null);
+      toast.error("Não foi possível gerar link de download deste corte.");
+      return;
+    }
+
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Falha ao baixar arquivo");
+
+      const blob = await response.blob();
+      const localUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = localUrl;
+      link.download = `${toSafeFilename(clip.title || `corte-${clip.clip_index ?? 1}`)}.mp4`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(localUrl);
+    } catch {
+      toast.error("Falha no download. Tente novamente.");
+    } finally {
+      setLoadingClipId(null);
+    }
+  };
+
+  const downloadAll = async () => {
+    for (const clip of clips) {
+      // sequencial para evitar muitos requests simultâneos
+      // eslint-disable-next-line no-await-in-loop
+      await downloadClip(clip);
+    }
   };
 
   return (
@@ -85,6 +133,12 @@ const ClipResults = ({ sourceLabel, clips, onReset }: ClipResultsProps) => {
           </div>
         </div>
 
+        {!hasAnyPreview && (
+          <p className="text-xs text-muted-foreground mb-4">
+            Ainda não há arquivo de vídeo real disponível para preview/download neste lote.
+          </p>
+        )}
+
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {clips.map((clip, index) => (
             <motion.article
@@ -104,21 +158,57 @@ const ClipResults = ({ sourceLabel, clips, onReset }: ClipResultsProps) => {
               <h3 className="font-system text-sm text-foreground mt-3 line-clamp-2">{clip.title}</h3>
               <p className="font-system text-xs text-muted-foreground mt-1 line-clamp-3">{clip.hook}</p>
 
-              <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
-                <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-system">
-                  Download do corte
-                </span>
+              <div className="mt-3 pt-3 border-t border-border flex items-center justify-between gap-3">
+                <button
+                  onClick={() => openPreview(clip)}
+                  disabled={loadingClipId === clip.id}
+                  className="text-muted-foreground text-xs uppercase tracking-widest font-system hover:text-primary transition-colors disabled:opacity-50"
+                >
+                  Preview
+                </button>
                 <button
                   onClick={() => downloadClip(clip)}
-                  className="text-primary text-xs uppercase tracking-widest font-system hover:opacity-80 transition-opacity"
+                  disabled={loadingClipId === clip.id}
+                  className="text-primary text-xs uppercase tracking-widest font-system hover:opacity-80 transition-opacity disabled:opacity-50"
                 >
-                  Baixar
+                  {loadingClipId === clip.id ? "Baixando..." : "Baixar"}
                 </button>
               </div>
             </motion.article>
           ))}
         </div>
       </div>
+
+      {previewClip && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-background border border-border w-full max-w-sm p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-system text-foreground truncate mr-4">{previewClip.title}</h3>
+              <button
+                onClick={() => setPreviewClip(null)}
+                className="text-xs uppercase tracking-widest text-muted-foreground hover:text-primary"
+              >
+                Fechar
+              </button>
+            </div>
+            <video
+              key={previewClip.id}
+              src={previewClip.download_url || undefined}
+              controls
+              playsInline
+              className="w-full aspect-[9/16] bg-black"
+            />
+            <div className="mt-3 flex justify-end">
+              <button
+                onClick={() => downloadClip(previewClip)}
+                className="text-primary text-xs uppercase tracking-widest font-system hover:opacity-80 transition-opacity"
+              >
+                Baixar este corte
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
