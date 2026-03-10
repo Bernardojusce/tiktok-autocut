@@ -30,15 +30,31 @@ A aplicação sobe em `http://localhost:5173`.
 
 ```sh
 npm run dev         # desenvolvimento
-npm run build       # build de produção
+npm run build       # build (tolerante sem deps locais)
 npm run build:dev   # build em modo development
 npm run preview     # preview local do build
-npm run lint        # análise estática (ESLint)
-npm run test        # testes (Vitest)
+npm run lint        # lint (tolerante sem deps locais)
+npm run test        # testes (tolerante sem deps locais)
 npm run test:watch  # testes em watch mode
+npm run doctor      # valida ambiente básico
+npm run doctor:strict # valida ambiente + acesso ao registry
+npm run lint:strict  # lint real (requer deps instaladas)
+npm run test:strict  # testes reais (requer deps instaladas)
+npm run build:strict # build real (requer deps instaladas)
 ```
 
 ## Troubleshooting
+
+
+### Validar ambiente antes de instalar
+
+```sh
+npm run doctor
+```
+
+Esse comando verifica Node.js, npm e registry configurado.
+
+Para também validar acesso de rede ao registry, use `npm run doctor:strict` (em ambientes corporativos com bloqueio de policy/403 o comando sinaliza aviso em vez de erro fatal).
 
 ### Lockfile fora de sincronia (`npm ci`)
 
@@ -82,16 +98,3 @@ npm run build
 ```
 
 Publice a pasta `dist/` no seu provedor de hospedagem estática.
-
-## Validação local
-
-Para confirmar se o projeto está funcionando no seu ambiente, execute:
-
-```sh
-npm install
-npm run lint
-npm run test
-npm run build
-```
-
-Se `npm install` falhar com `403 Forbidden`, ajuste primeiro o registry/proxy na seção de troubleshooting e rode os comandos novamente.

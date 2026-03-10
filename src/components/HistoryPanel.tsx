@@ -110,7 +110,7 @@ const HistoryPanel = ({ onClose }: HistoryPanelProps) => {
                     }`}
                   >
                     {job.status === "completed"
-                      ? `${job.published_count}/${job.clips_count} publicados`
+                      ? `${job.clips_count} cortes gerados`
                       : job.status === "failed"
                       ? "Falhou"
                       : "Processando..."}
