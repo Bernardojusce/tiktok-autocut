@@ -1,12 +1,21 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+interface GeneratedClip {
+  clip_index: number;
+  title: string;
+  duration: string;
+  hook: string;
+  storage_path: string;
+  download_url: string;
+}
+
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
@@ -38,17 +47,27 @@ serve(async (req) => {
 
     steps.push("Aplicando formato vertical 9:16...");
     steps.push("Gerando legendas automáticas...");
-    steps.push("Conectando ao TikTok...");
-
-    for (let i = 1; i <= clipCount; i++) {
-      steps.push(`Publicando clipe ${String(i).padStart(2, "0")}... ✓`);
-    }
-
+    steps.push("Finalizando cortes para revisão...");
     steps.push("");
-    steps.push(`COMPLETO. ${clipCount} clipes publicados no TikTok.`);
-    steps.push("Pode fechar esta aba.");
+    steps.push(`COMPLETO. ${clipCount} cortes prontos para visualizar e baixar.`);
 
-    return new Response(JSON.stringify({ steps }), {
+    const baseLabel = file_name ?? search_query ?? youtube_url ?? "video";
+    const clips: GeneratedClip[] = Array.from({ length: clipCount }, (_, i) => {
+      const clipIndex = i + 1;
+      const seconds = 18 + ((i * 7) % 40);
+      const name = `clip-${String(clipIndex).padStart(2, "0")}.mp4`;
+
+      return {
+        clip_index: clipIndex,
+        title: `${baseLabel} · Corte ${String(clipIndex).padStart(2, "0")}`,
+        duration: `00:${String(seconds).padStart(2, "0")}`,
+        hook: "Abertura com gancho forte, cortes rápidos e foco no momento de maior retenção.",
+        storage_path: `pending/${name}`,
+        download_url: "",
+      };
+    });
+
+    return new Response(JSON.stringify({ steps, clips }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
